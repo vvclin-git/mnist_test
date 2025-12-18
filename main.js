@@ -6,7 +6,7 @@ const CONFIG = {
     bg: "#ffffff",
     ink: "#0f172a",
   },
-  modelUrl: "./web_graph_model_512_352/model.json",
+  modelUrl: "./web_graph_model_CNN_48_80/model.json",
   autoPredictDelayMs: 1200,
   debug: {
     showPreview: false, // flip to true to show 28x28 preview
