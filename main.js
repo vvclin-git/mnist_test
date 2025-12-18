@@ -20,6 +20,7 @@ const state = {
   activePointerId: null,
   idleTimer: null,
   isPredicting: false,
+  hasDrawing: false,
 };
 
 function getElements() {
@@ -49,12 +50,20 @@ function primeCanvas(canvas, ctx) {
   ctx.lineCap = "round";
   ctx.strokeStyle = CONFIG.colors.ink;
   ctx.beginPath();
+  state.hasDrawing = false;
 }
 
 function attachPointerHandlers(canvas, ctx) {
   canvas.addEventListener("pointerdown", (e) => {
     if (state.isPredicting) return;
     clearIdleTimer();
+    // Auto-clear when idle and a previous drawing exists
+    if (!state.isDrawing && state.hasDrawing) {
+      primeCanvas(canvas, ctx);
+      const { result, statusHint } = getElements();
+      if (result) result.textContent = "-";
+      if (statusHint) statusHint.textContent = "Idle";
+    }
     state.isDrawing = true;
     state.activePointerId = e.pointerId;
     canvas.setPointerCapture(e.pointerId);
@@ -94,6 +103,7 @@ function drawPoint(e, canvas, ctx, connect = false) {
   }
   ctx.lineTo(x, y);
   ctx.stroke();
+  state.hasDrawing = true;
 }
 
 function clearIdleTimer() {
@@ -105,7 +115,7 @@ function clearIdleTimer() {
 
 function schedulePredict() {
   clearIdleTimer();
-  // While waiting to auto-predict, keep isDrawing true so we treat the canvas as receptive to more strokes
+  // While waiting to auto-predict, we are idle but still receptive to new strokes
   state.isDrawing = true;
   state.idleTimer = setTimeout(() => {
     const elements = getElements();
