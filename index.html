@@ -166,10 +166,21 @@
       border: 2px dashed rgba(0, 88, 163, 0.2);
     }
 
+    .status-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
     .label {
       color: var(--muted);
       font-weight: 600;
       letter-spacing: 0.2px;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 0.95rem;
     }
 
     .result {
@@ -223,12 +234,14 @@
         </div>
 
         <div class="controls">
-          <button id="predictBtn" class="btn primary" disabled>Predict</button>
           <button id="clearBtn" class="btn ghost">Clear</button>
         </div>
 
         <div class="status">
-          <span class="label">Prediction</span>
+          <div class="status-text">
+            <span class="label">Prediction</span>
+            <span class="hint" id="statusHint">Idle</span>
+          </div>
           <span class="result" id="result">-</span>
         </div>
       </section>
