@@ -7,6 +7,7 @@ const CONFIG = {
     ink: "#0f172a",
   },
   modelUrl: "./web_graph_model_512_352/model.json",
+  autoPredictDelayMs: 800,
   debug: {
     showPreview: false, // flip to true to show 28x28 preview
     logTensor: false,
@@ -17,6 +18,8 @@ const state = {
   model: null,
   isDrawing: false,
   activePointerId: null,
+  idleTimer: null,
+  isPredicting: false,
 };
 
 function getElements() {
@@ -24,9 +27,9 @@ function getElements() {
     app: document.getElementById("app"),
     canvas: document.getElementById("canvas"),
     preview: document.getElementById("preview"),
-    predictBtn: document.getElementById("predictBtn"),
     clearBtn: document.getElementById("clearBtn"),
     result: document.getElementById("result"),
+    statusHint: document.getElementById("statusHint"),
   };
 }
 
@@ -50,9 +53,13 @@ function primeCanvas(canvas, ctx) {
 
 function attachPointerHandlers(canvas, ctx) {
   canvas.addEventListener("pointerdown", (e) => {
+    if (state.isPredicting) return;
+    clearIdleTimer();
     state.isDrawing = true;
     state.activePointerId = e.pointerId;
     canvas.setPointerCapture(e.pointerId);
+    const { statusHint } = getElements();
+    if (statusHint) statusHint.textContent = "Drawing...";
     drawPoint(e, canvas, ctx);
   });
 
@@ -62,9 +69,11 @@ function attachPointerHandlers(canvas, ctx) {
   });
 
   const stopDrawing = () => {
+    if (state.isPredicting) return;
     state.isDrawing = false;
     state.activePointerId = null;
     ctx.beginPath();
+    schedulePredict();
   };
 
   canvas.addEventListener("pointerup", stopDrawing);
@@ -85,6 +94,23 @@ function drawPoint(e, canvas, ctx, connect = false) {
   }
   ctx.lineTo(x, y);
   ctx.stroke();
+}
+
+function clearIdleTimer() {
+  if (state.idleTimer) {
+    clearTimeout(state.idleTimer);
+    state.idleTimer = null;
+  }
+}
+
+function schedulePredict() {
+  clearIdleTimer();
+  state.idleTimer = setTimeout(() => {
+    const elements = getElements();
+    predict(elements);
+  }, CONFIG.autoPredictDelayMs);
+  const { statusHint } = getElements();
+  if (statusHint) statusHint.textContent = "Waiting to predict...";
 }
 
 function getInputTensor(canvas, preview, { invert = true } = {}) {
@@ -117,42 +143,57 @@ function getInputTensor(canvas, preview, { invert = true } = {}) {
   return tensor;
 }
 
-async function predict(canvas, preview, resultEl, predictBtn) {
-  if (!state.model) return;
-  if (predictBtn) predictBtn.disabled = true;
-  resultEl.textContent = "...";
+function setPredicting(flag, elements) {
+  state.isPredicting = flag;
+  const { statusHint, canvas } = elements;
+  if (statusHint) statusHint.textContent = flag ? "Predicting..." : "Idle";
+  if (canvas) {
+    canvas.style.pointerEvents = flag ? "none" : "auto";
+    canvas.style.opacity = flag ? "0.75" : "1";
+  }
+}
+
+async function predict(elements) {
+  const { canvas, preview, result } = elements;
+  if (!state.model || !canvas || state.isPredicting) return;
+  clearIdleTimer();
+  setPredicting(true, elements);
+  result.textContent = "...";
 
   const results = [];
-  for (const invert of [true]) {
-    const input = getInputTensor(canvas, preview, { invert });
-    const inputName = state.model.inputs[0].name;
-    const yRaw = state.model.execute({ [inputName]: input });
-    const y = Array.isArray(yRaw) ? yRaw[0] : yRaw;
+  try {
+    for (const invert of [true]) {
+      const input = getInputTensor(canvas, preview, { invert });
+      const inputName = state.model.inputs[0].name;
+      const yRaw = state.model.execute({ [inputName]: input });
+      const y = Array.isArray(yRaw) ? yRaw[0] : yRaw;
 
-    try {
-      const probs = await y.data();
-      let bestIdx = 0;
-      for (let i = 1; i < probs.length; i++) {
-        if (probs[i] > probs[bestIdx]) bestIdx = i;
+      try {
+        const probs = await y.data();
+        let bestIdx = 0;
+        for (let i = 1; i < probs.length; i++) {
+          if (probs[i] > probs[bestIdx]) bestIdx = i;
+        }
+        results.push({ invert, bestIdx, bestProb: probs[bestIdx] });
+      } finally {
+        input.dispose();
+        y.dispose();
+        if (Array.isArray(yRaw)) yRaw.forEach(t => t.dispose());
       }
-      results.push({ invert, bestIdx, bestProb: probs[bestIdx] });
-    } finally {
-      input.dispose();
-      y.dispose();
-      if (Array.isArray(yRaw)) yRaw.forEach(t => t.dispose());
     }
-  }
 
-  results.sort((a, b) => b.bestProb - a.bestProb);
-  const best = results[0];
-  resultEl.textContent = String(best.bestIdx);
-  console.log("Chosen preprocessing:", best.invert ? "inverted" : "normal", best);
-  if (predictBtn) predictBtn.disabled = false;
+    results.sort((a, b) => b.bestProb - a.bestProb);
+    const best = results[0];
+    result.textContent = String(best.bestIdx);
+    console.log("Chosen preprocessing:", best.invert ? "inverted" : "normal", best);
+  } finally {
+    setPredicting(false, elements);
+  }
 }
 
 function init() {
-  const { app, canvas, preview, predictBtn, clearBtn, result } = getElements();
-  if (!canvas || !predictBtn || !clearBtn || !result) return;
+  const { app, canvas, clearBtn, result, statusHint } = getElements();
+  if (!canvas || !clearBtn || !result) return;
 
   if (app && CONFIG.debug.showPreview) {
     app.dataset.debug = "true";
@@ -165,9 +206,9 @@ function init() {
   clearBtn.addEventListener("click", () => {
     primeCanvas(canvas, ctx);
     result.textContent = "-";
+    clearIdleTimer();
+    if (statusHint) statusHint.textContent = "Idle";
   });
-
-  predictBtn.addEventListener("click", () => predict(canvas, preview, result, predictBtn));
 }
 
 window.addEventListener("load", async () => {
@@ -175,9 +216,9 @@ window.addEventListener("load", async () => {
   init();
   try {
     await loadModel();
-    elements.predictBtn.disabled = false;
+    if (elements.statusHint) elements.statusHint.textContent = "Idle";
   } catch (err) {
     console.error("Error loading model", err);
-    if (elements.predictBtn) elements.predictBtn.textContent = "Load failed";
+    if (elements.statusHint) elements.statusHint.textContent = "Load failed";
   }
 });
