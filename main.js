@@ -105,6 +105,8 @@ function clearIdleTimer() {
 
 function schedulePredict() {
   clearIdleTimer();
+  // While waiting to auto-predict, keep isDrawing true so we treat the canvas as receptive to more strokes
+  state.isDrawing = true;
   state.idleTimer = setTimeout(() => {
     const elements = getElements();
     predict(elements);
