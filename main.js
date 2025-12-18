@@ -69,7 +69,8 @@ function attachPointerHandlers(canvas, ctx) {
   });
 
   const stopDrawing = () => {
-    if (state.isPredicting) return;
+    // Only schedule predict when a stroke actually happened
+    if (state.isPredicting || !state.isDrawing) return;
     state.isDrawing = false;
     state.activePointerId = null;
     ctx.beginPath();
