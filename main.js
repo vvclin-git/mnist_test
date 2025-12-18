@@ -7,7 +7,7 @@ const CONFIG = {
     ink: "#0f172a",
   },
   modelUrl: "./web_graph_model_512_352/model.json",
-  autoPredictDelayMs: 800,
+  autoPredictDelayMs: 1200,
   debug: {
     showPreview: false, // flip to true to show 28x28 preview
     logTensor: false,
@@ -68,18 +68,17 @@ function attachPointerHandlers(canvas, ctx) {
     drawPoint(e, canvas, ctx, true);
   });
 
-  const stopDrawing = () => {
-    // Only schedule predict when a stroke actually happened
+  const stopDrawing = (shouldSchedule) => {
     if (state.isPredicting || !state.isDrawing) return;
     state.isDrawing = false;
     state.activePointerId = null;
     ctx.beginPath();
-    schedulePredict();
+    if (shouldSchedule) schedulePredict();
   };
 
-  canvas.addEventListener("pointerup", stopDrawing);
-  canvas.addEventListener("pointercancel", stopDrawing);
-  canvas.addEventListener("pointerleave", stopDrawing);
+  canvas.addEventListener("pointerup", () => stopDrawing(true));
+  canvas.addEventListener("pointercancel", () => stopDrawing(true));
+  canvas.addEventListener("pointerleave", () => stopDrawing(false));
 }
 
 function drawPoint(e, canvas, ctx, connect = false) {
@@ -111,7 +110,7 @@ function schedulePredict() {
     predict(elements);
   }, CONFIG.autoPredictDelayMs);
   const { statusHint } = getElements();
-  if (statusHint) statusHint.textContent = "Waiting to predict...";
+  if (statusHint) statusHint.textContent = "Drawing...";
 }
 
 function getInputTensor(canvas, preview, { invert = true } = {}) {
