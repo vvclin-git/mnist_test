@@ -72,6 +72,7 @@
       display: grid;
       grid-template-columns: 1fr;
       gap: 20px;
+      align-items: start;
       justify-items: center;
     }
 
@@ -111,9 +112,9 @@
     }
 
     #preview {
-      width: 80px;
-      height: 80px;
-      border-radius: 14px;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
       border: 2px dashed var(--muted);
       background: rgba(0, 0, 0, 0.03);
       image-rendering: pixelated;
@@ -204,6 +205,124 @@
 
     .info-card li { margin-bottom: 8px; }
 
+    .debug-card {
+      display: none;
+      font-size: 12px;
+      font-family: "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+    }
+
+    .app[data-debug="true"] .debug-card {
+      display: block;
+    }
+
+    .debug-card h2 {
+      margin: 0;
+      font-size: 1.05rem;
+    }
+
+    .debug-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .backend-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    .backend-control select {
+      border-radius: 10px;
+      border: 2px solid var(--muted);
+      padding: 6px 10px;
+      font-family: inherit;
+      font-size: 0.85rem;
+      background: #ffffff;
+      color: var(--ink);
+      min-height: 32px;
+    }
+
+    .debug-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .debug-card .btn {
+      padding: 6px 10px;
+      font-size: 0.8rem;
+      min-height: auto;
+      border-radius: 10px;
+    }
+
+    .debug-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+    }
+
+    .debug-group h3 {
+      margin: 0 0 8px;
+      font-size: 0.85rem;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .debug-list {
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 6px;
+    }
+
+    .debug-row {
+      display: grid;
+      grid-template-columns: minmax(110px, 1fr) minmax(0, 2fr);
+      gap: 8px;
+      align-items: start;
+    }
+
+    .debug-row dt {
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    .debug-row dd {
+      margin: 0;
+      font-size: 12px;
+      color: var(--ink);
+      word-break: break-word;
+    }
+
+    .debug-preview {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 10px;
+    }
+
+    .debug-preview span {
+      font-size: 0.85rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    @media (min-width: 980px) {
+      .grid {
+        grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+        justify-items: stretch;
+      }
+    }
+
     @media (max-width: 900px) {
       .canvas-wrap { grid-template-columns: 1fr auto; }
     }
@@ -212,10 +331,10 @@
       .app { padding: 16px; }
       h1 { font-size: 1.8rem; }
       .canvas-wrap { grid-template-columns: 1fr; }
-      #preview { order: -1; }
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.22.0/dist/tf-backend-wasm.min.js"></script>
   <script defer src="./main.js"></script>
 </head>
 <body>
@@ -230,7 +349,6 @@
       <section class="card draw-card">
         <div class="canvas-wrap">
           <canvas id="canvas" width="280" height="280"></canvas>
-          <canvas id="preview" width="28" height="28"></canvas>
         </div>
 
         <div class="controls">
@@ -243,6 +361,93 @@
             <span class="hint" id="statusHint">Idle</span>
           </div>
           <span class="result" id="result">-</span>
+        </div>
+      </section>
+
+      <section class="card debug-card" id="debugPanel">
+        <div class="debug-header">
+          <h2>Debug</h2>
+          <div class="backend-control">
+            <span>Backend</span>
+            <select id="backendSelect" aria-label="TensorFlow.js backend"></select>
+            <button class="btn ghost" id="backendApplyBtn" type="button">Apply</button>
+          </div>
+          <div class="debug-actions">
+            <button class="btn ghost" id="debugCopyBtn" type="button">Copy info</button>
+            <button class="btn ghost" id="debugExportJson" type="button">Export JSON</button>
+          </div>
+        </div>
+        <div class="debug-preview">
+          <span>28x28 input</span>
+          <canvas id="preview" width="28" height="28"></canvas>
+          <button class="btn ghost" id="debugExportBmp" type="button">Export BMP</button>
+        </div>
+        <div class="debug-grid">
+          <div class="debug-group">
+            <h3>Environment</h3>
+            <dl class="debug-list">
+              <div class="debug-row"><dt>location.href</dt><dd id="dbgLocation">-</dd></div>
+              <div class="debug-row"><dt>userAgent</dt><dd id="dbgUserAgent">-</dd></div>
+              <div class="debug-row"><dt>platform</dt><dd id="dbgPlatform">-</dd></div>
+              <div class="debug-row"><dt>devicePixelRatio</dt><dd id="dbgDpr">-</dd></div>
+            </dl>
+          </div>
+
+          <div class="debug-group">
+            <h3>TensorFlow.js</h3>
+            <dl class="debug-list">
+              <div class="debug-row"><dt>tfjs</dt><dd id="dbgTfVersion">-</dd></div>
+              <div class="debug-row"><dt>backend</dt><dd id="dbgBackend">-</dd></div>
+              <div class="debug-row"><dt>WEBGL_VERSION</dt><dd id="dbgWebglVersion">-</dd></div>
+              <div class="debug-row"><dt>FLOAT32_CAPABLE</dt><dd id="dbgWebglFloat32Capable">-</dd></div>
+              <div class="debug-row"><dt>FLOAT32_ENABLED</dt><dd id="dbgWebglFloat32Enabled">-</dd></div>
+            </dl>
+          </div>
+
+          <div class="debug-group">
+            <h3>Canvas</h3>
+            <dl class="debug-list">
+              <div class="debug-row"><dt>size</dt><dd id="dbgCanvasSize">-</dd></div>
+              <div class="debug-row"><dt>rect</dt><dd id="dbgCanvasRect">-</dd></div>
+              <div class="debug-row"><dt>scaleX</dt><dd id="dbgScaleX">-</dd></div>
+              <div class="debug-row"><dt>scaleY</dt><dd id="dbgScaleY">-</dd></div>
+              <div class="debug-row"><dt>touchAction</dt><dd id="dbgTouchAction">-</dd></div>
+              <div class="debug-row"><dt>smoothing</dt><dd id="dbgSmoothing">-</dd></div>
+            </dl>
+          </div>
+
+          <div class="debug-group">
+            <h3>Input</h3>
+            <dl class="debug-list">
+              <div class="debug-row"><dt>invert</dt><dd id="dbgInvert">-</dd></div>
+              <div class="debug-row"><dt>min</dt><dd id="dbgMin">-</dd></div>
+              <div class="debug-row"><dt>max</dt><dd id="dbgMax">-</dd></div>
+              <div class="debug-row"><dt>mean</dt><dd id="dbgMean">-</dd></div>
+              <div class="debug-row"><dt>std</dt><dd id="dbgStd">-</dd></div>
+              <div class="debug-row"><dt>nonZeroRatio</dt><dd id="dbgNonZeroRatio">-</dd></div>
+            </dl>
+          </div>
+
+          <div class="debug-group">
+            <h3>Prediction</h3>
+            <dl class="debug-list">
+              <div class="debug-row"><dt>class</dt><dd id="dbgPredClass">-</dd></div>
+              <div class="debug-row"><dt>confidence</dt><dd id="dbgConfidence">-</dd></div>
+              <div class="debug-row"><dt>top3</dt><dd id="dbgTop3">-</dd></div>
+              <div class="debug-row"><dt>latency</dt><dd id="dbgLatency">-</dd></div>
+            </dl>
+          </div>
+
+          <div class="debug-group">
+            <h3>Events</h3>
+            <dl class="debug-list">
+              <div class="debug-row"><dt>isPointerDown</dt><dd id="dbgPointerDown">-</dd></div>
+              <div class="debug-row"><dt>idleTimerActive</dt><dd id="dbgIdleActive">-</dd></div>
+              <div class="debug-row"><dt>hasDrawing</dt><dd id="dbgHasDrawing">-</dd></div>
+              <div class="debug-row"><dt>hasPredicted</dt><dd id="dbgHasPredicted">-</dd></div>
+              <div class="debug-row"><dt>lastEvent</dt><dd id="dbgLastEvent">-</dd></div>
+            </dl>
+          </div>
         </div>
       </section>
     </main>
