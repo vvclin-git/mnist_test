@@ -9,8 +9,8 @@ const CONFIG = {
   modelUrl: "./web_graph_model_CNN_48_80/model.json",
   autoPredictDelayMs: 1200,
   debug: {
-    showPanel: true,
-    showPreview: true,
+    showPanel: false,
+    showPreview: false,
     logTensor: false,
   },
 };
