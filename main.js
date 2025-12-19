@@ -104,10 +104,11 @@ function configureWasmBackend() {
 
 async function applyStoredBackend() {
   const saved = getStoredBackend();
-  if (!saved) return;
-  if (tf.getBackend && tf.getBackend() === saved) return;
+  const preferred = saved || "wasm";
+  if (!saved) setStoredBackend(preferred);
+  if (tf.getBackend && tf.getBackend() === preferred) return;
   try {
-    const ok = await tf.setBackend(saved);
+    const ok = await tf.setBackend(preferred);
     if (!ok) {
       setStoredBackend(null);
     }
