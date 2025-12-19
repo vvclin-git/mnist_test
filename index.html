@@ -72,6 +72,7 @@
       display: grid;
       grid-template-columns: 1fr;
       gap: 20px;
+      align-items: start;
       justify-items: center;
     }
 
@@ -111,9 +112,9 @@
     }
 
     #preview {
-      width: 80px;
-      height: 80px;
-      border-radius: 14px;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
       border: 2px dashed var(--muted);
       background: rgba(0, 0, 0, 0.03);
       image-rendering: pixelated;
@@ -206,6 +207,8 @@
 
     .debug-card {
       display: none;
+      font-size: 12px;
+      font-family: "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
     }
 
     .app[data-debug="true"] .debug-card {
@@ -213,8 +216,36 @@
     }
 
     .debug-card h2 {
-      margin: 0 0 12px;
-      font-size: 1.4rem;
+      margin: 0;
+      font-size: 1.05rem;
+    }
+
+    .debug-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .debug-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .debug-actions .btn {
+      padding: 6px 10px;
+      font-size: 0.8rem;
+      min-height: auto;
+      border-radius: 10px;
+    }
+
+    .debug-preview .btn {
+      padding: 6px 10px;
+      font-size: 0.8rem;
+      min-height: auto;
+      border-radius: 10px;
     }
 
     .debug-grid {
@@ -225,7 +256,7 @@
 
     .debug-group h3 {
       margin: 0 0 8px;
-      font-size: 1rem;
+      font-size: 0.85rem;
       letter-spacing: 0.02em;
       text-transform: uppercase;
       color: var(--muted);
@@ -252,10 +283,30 @@
 
     .debug-row dd {
       margin: 0;
-      font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 0.92rem;
+      font-size: 12px;
       color: var(--ink);
       word-break: break-word;
+    }
+
+    .debug-preview {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 10px;
+    }
+
+    .debug-preview span {
+      font-size: 0.85rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    @media (min-width: 980px) {
+      .grid {
+        grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+        justify-items: stretch;
+      }
     }
 
     @media (max-width: 900px) {
@@ -266,7 +317,6 @@
       .app { padding: 16px; }
       h1 { font-size: 1.8rem; }
       .canvas-wrap { grid-template-columns: 1fr; }
-      #preview { order: -1; }
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
@@ -284,7 +334,6 @@
       <section class="card draw-card">
         <div class="canvas-wrap">
           <canvas id="canvas" width="280" height="280"></canvas>
-          <canvas id="preview" width="28" height="28"></canvas>
         </div>
 
         <div class="controls">
@@ -301,7 +350,17 @@
       </section>
 
       <section class="card debug-card" id="debugPanel">
-        <h2>Debug</h2>
+        <div class="debug-header">
+          <h2>Debug</h2>
+          <div class="debug-actions">
+            <button class="btn ghost" id="debugCopyBtn" type="button">Copy info</button>
+          </div>
+        </div>
+        <div class="debug-preview">
+          <span>28x28 input</span>
+          <canvas id="preview" width="28" height="28"></canvas>
+          <button class="btn ghost" id="debugExportBmp" type="button">Export BMP</button>
+        </div>
         <div class="debug-grid">
           <div class="debug-group">
             <h3>Environment</h3>

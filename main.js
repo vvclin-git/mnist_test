@@ -29,6 +29,7 @@ const state = {
   lastPredictLatencyMs: null,
   lastInvert: null,
   lastSmoothingEnabled: null,
+  lastPredictedClass: null,
 };
 
 function getElements() {
@@ -40,6 +41,8 @@ function getElements() {
     result: document.getElementById("result"),
     statusHint: document.getElementById("statusHint"),
     debugPanel: document.getElementById("debugPanel"),
+    debugCopyBtn: document.getElementById("debugCopyBtn"),
+    debugExportBmp: document.getElementById("debugExportBmp"),
   };
 }
 
@@ -131,6 +134,123 @@ function getTopK(probs, k = 3) {
   const items = Array.from(probs, (prob, idx) => ({ idx, prob }));
   items.sort((a, b) => b.prob - a.prob);
   return items.slice(0, k);
+}
+
+function collectDebugText() {
+  const panel = document.getElementById("debugPanel");
+  if (!panel) return "";
+  const lines = [];
+  const groups = panel.querySelectorAll(".debug-group");
+  groups.forEach((group) => {
+    const heading = group.querySelector("h3");
+    if (heading) lines.push(heading.textContent.trim());
+    const rows = group.querySelectorAll(".debug-row");
+    rows.forEach((row) => {
+      const key = row.querySelector("dt")?.textContent?.trim() || "";
+      const value = row.querySelector("dd")?.textContent?.trim() || "-";
+      lines.push(`${key}: ${value}`);
+    });
+    lines.push("");
+  });
+  return lines.join("\n").trim();
+}
+
+async function copyDebugInfo() {
+  const text = collectDebugText();
+  if (!text) return;
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "absolute";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+}
+
+function toMonochromeBmp(imageData) {
+  const { width, height, data } = imageData;
+  const rowBytes = Math.ceil(width / 8);
+  const paddedRowBytes = (rowBytes + 3) & ~3;
+  const pixelArraySize = paddedRowBytes * height;
+  const headerSize = 14 + 40 + 8;
+  const fileSize = headerSize + pixelArraySize;
+
+  const buffer = new ArrayBuffer(fileSize);
+  const view = new DataView(buffer);
+  let offset = 0;
+
+  view.setUint8(offset++, 0x42);
+  view.setUint8(offset++, 0x4d);
+  view.setUint32(offset, fileSize, true); offset += 4;
+  view.setUint16(offset, 0, true); offset += 2;
+  view.setUint16(offset, 0, true); offset += 2;
+  view.setUint32(offset, headerSize, true); offset += 4;
+
+  view.setUint32(offset, 40, true); offset += 4;
+  view.setInt32(offset, width, true); offset += 4;
+  view.setInt32(offset, height, true); offset += 4;
+  view.setUint16(offset, 1, true); offset += 2;
+  view.setUint16(offset, 1, true); offset += 2;
+  view.setUint32(offset, 0, true); offset += 4;
+  view.setUint32(offset, pixelArraySize, true); offset += 4;
+  view.setInt32(offset, 2835, true); offset += 4;
+  view.setInt32(offset, 2835, true); offset += 4;
+  view.setUint32(offset, 2, true); offset += 4;
+  view.setUint32(offset, 0, true); offset += 4;
+
+  view.setUint8(offset++, 0x00);
+  view.setUint8(offset++, 0x00);
+  view.setUint8(offset++, 0x00);
+  view.setUint8(offset++, 0x00);
+  view.setUint8(offset++, 0xff);
+  view.setUint8(offset++, 0xff);
+  view.setUint8(offset++, 0xff);
+  view.setUint8(offset++, 0x00);
+
+  const row = new Uint8Array(paddedRowBytes);
+  for (let y = height - 1; y >= 0; y--) {
+    row.fill(0);
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const gray = (r + g + b) / 3;
+      const isWhite = gray > 127;
+      if (isWhite) {
+        const byteIndex = Math.floor(x / 8);
+        const bitIndex = 7 - (x % 8);
+        row[byteIndex] |= 1 << bitIndex;
+      }
+    }
+    new Uint8Array(buffer, offset, paddedRowBytes).set(row);
+    offset += paddedRowBytes;
+  }
+
+  return new Blob([buffer], { type: "image/bmp" });
+}
+
+function exportPreviewBmp(preview) {
+  if (!preview) return;
+  const ctx = preview.getContext("2d");
+  const imageData = ctx.getImageData(0, 0, preview.width, preview.height);
+  const bmpBlob = toMonochromeBmp(imageData);
+  const classLabel = state.lastPredictedClass == null ? "unknown" : String(state.lastPredictedClass);
+  const filename = `mnist_${classLabel}.bmp`;
+
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(bmpBlob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(link.href);
 }
 
 async function loadModel() {
@@ -353,6 +473,7 @@ async function predict(elements) {
     const best = results[0];
     result.textContent = String(best.bestIdx);
     state.hasPredicted = true;
+    state.lastPredictedClass = best.bestIdx;
     state.lastPredictTop3 = best.top3 || null;
     state.lastPredictLatencyMs = performance.now() - startedAt;
     updateDebugPrediction(best.bestIdx, best.bestProb, best.top3, state.lastPredictLatencyMs);
@@ -364,7 +485,7 @@ async function predict(elements) {
 }
 
 function init() {
-  const { app, canvas, clearBtn, result, statusHint } = getElements();
+  const { app, canvas, clearBtn, result, statusHint, preview, debugCopyBtn, debugExportBmp } = getElements();
   if (!canvas || !clearBtn || !result) return;
 
   if (app && (CONFIG.debug.showPreview || CONFIG.debug.showPanel)) {
@@ -391,6 +512,30 @@ function init() {
     updateDebugPrediction(null, null, null, state.lastPredictLatencyMs);
     updateDebugEvents();
   });
+
+  if (debugCopyBtn) {
+    debugCopyBtn.addEventListener("click", async () => {
+      debugCopyBtn.disabled = true;
+      try {
+        await copyDebugInfo();
+        debugCopyBtn.textContent = "Copied";
+        setTimeout(() => {
+          debugCopyBtn.textContent = "Copy info";
+          debugCopyBtn.disabled = false;
+        }, 900);
+      } catch (err) {
+        debugCopyBtn.textContent = "Copy failed";
+        setTimeout(() => {
+          debugCopyBtn.textContent = "Copy info";
+          debugCopyBtn.disabled = false;
+        }, 1200);
+      }
+    });
+  }
+
+  if (debugExportBmp) {
+    debugExportBmp.addEventListener("click", () => exportPreviewBmp(preview));
+  }
 }
 
 window.addEventListener("load", async () => {
