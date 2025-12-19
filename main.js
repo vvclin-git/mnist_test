@@ -16,11 +16,12 @@ const CONFIG = {
 
 const state = {
   model: null,
-  isDrawing: false,
+  isPointerDown: false,
   activePointerId: null,
   idleTimer: null,
   isPredicting: false,
   hasDrawing: false,
+  hasPredicted: false,
 };
 
 function getElements() {
@@ -51,20 +52,22 @@ function primeCanvas(canvas, ctx) {
   ctx.strokeStyle = CONFIG.colors.ink;
   ctx.beginPath();
   state.hasDrawing = false;
+  state.hasPredicted = false;
 }
 
 function attachPointerHandlers(canvas, ctx) {
+  canvas.style.touchAction = "none";
+
   canvas.addEventListener("pointerdown", (e) => {
     if (state.isPredicting) return;
     clearIdleTimer();
-    // Auto-clear when idle and a previous drawing exists
-    if (!state.isDrawing && state.hasDrawing) {
+    if (state.hasPredicted) {
       primeCanvas(canvas, ctx);
       const { result, statusHint } = getElements();
       if (result) result.textContent = "-";
       if (statusHint) statusHint.textContent = "Idle";
     }
-    state.isDrawing = true;
+    state.isPointerDown = true;
     state.activePointerId = e.pointerId;
     canvas.setPointerCapture(e.pointerId);
     const { statusHint } = getElements();
@@ -73,20 +76,21 @@ function attachPointerHandlers(canvas, ctx) {
   });
 
   canvas.addEventListener("pointermove", (e) => {
-    if (!state.isDrawing || e.pointerId !== state.activePointerId) return;
+    if (!state.isPointerDown || e.pointerId !== state.activePointerId) return;
     drawPoint(e, canvas, ctx, true);
   });
 
   const stopDrawing = (shouldSchedule) => {
-    if (state.isPredicting || !state.isDrawing) return;
-    state.isDrawing = false;
+    if (!state.isPointerDown) return;
+    state.isPointerDown = false;
     state.activePointerId = null;
     ctx.beginPath();
-    if (shouldSchedule) schedulePredict();
+    if (!state.isPredicting && shouldSchedule && state.hasDrawing) schedulePredict();
   };
 
   canvas.addEventListener("pointerup", () => stopDrawing(true));
   canvas.addEventListener("pointercancel", () => stopDrawing(true));
+  canvas.addEventListener("lostpointercapture", () => stopDrawing(true));
   canvas.addEventListener("pointerleave", () => stopDrawing(false));
 }
 
@@ -115,14 +119,12 @@ function clearIdleTimer() {
 
 function schedulePredict() {
   clearIdleTimer();
-  // While waiting to auto-predict, we are idle but still receptive to new strokes
-  state.isDrawing = true;
   state.idleTimer = setTimeout(() => {
     const elements = getElements();
     predict(elements);
   }, CONFIG.autoPredictDelayMs);
   const { statusHint } = getElements();
-  if (statusHint) statusHint.textContent = "Drawing...";
+  if (statusHint) statusHint.textContent = "Predicting soon...";
 }
 
 function getInputTensor(canvas, preview, { invert = true } = {}) {
@@ -197,6 +199,7 @@ async function predict(elements) {
     results.sort((a, b) => b.bestProb - a.bestProb);
     const best = results[0];
     result.textContent = String(best.bestIdx);
+    state.hasPredicted = true;
     console.log("Chosen preprocessing:", best.invert ? "inverted" : "normal", best);
   } finally {
     setPredicting(false, elements);
