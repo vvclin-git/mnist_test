@@ -34,6 +34,8 @@ const state = {
   lastInputShape: null,
 };
 
+const BACKEND_STORAGE_KEY = "tfjs-backend";
+
 function getElements() {
   return {
     app: document.getElementById("app"),
@@ -46,6 +48,8 @@ function getElements() {
     debugCopyBtn: document.getElementById("debugCopyBtn"),
     debugExportBmp: document.getElementById("debugExportBmp"),
     debugExportJson: document.getElementById("debugExportJson"),
+    backendSelect: document.getElementById("backendSelect"),
+    backendApplyBtn: document.getElementById("backendApplyBtn"),
   };
 }
 
@@ -60,6 +64,57 @@ function formatNumber(value, digits = 4) {
 
 function formatMillis(value) {
   return Number.isFinite(value) ? `${value.toFixed(1)} ms` : "-";
+}
+
+function getAvailableBackends() {
+  if (typeof tf?.engine === "function") {
+    const registry = tf.engine().registryFactory;
+    if (registry && typeof registry === "object") {
+      return Object.keys(registry);
+    }
+  }
+  return ["webgl", "cpu"];
+}
+
+function getStoredBackend() {
+  try {
+    return localStorage.getItem(BACKEND_STORAGE_KEY);
+  } catch (err) {
+    return null;
+  }
+}
+
+function setStoredBackend(backend) {
+  try {
+    if (backend) {
+      localStorage.setItem(BACKEND_STORAGE_KEY, backend);
+    } else {
+      localStorage.removeItem(BACKEND_STORAGE_KEY);
+    }
+  } catch (err) {
+    // Ignore storage errors in restrictive environments.
+  }
+}
+
+function configureWasmBackend() {
+  if (tf?.wasm?.setWasmPaths) {
+    tf.wasm.setWasmPaths("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.22.0/dist/");
+  }
+}
+
+async function applyStoredBackend() {
+  const saved = getStoredBackend();
+  if (!saved) return;
+  if (tf.getBackend && tf.getBackend() === saved) return;
+  try {
+    const ok = await tf.setBackend(saved);
+    if (!ok) {
+      setStoredBackend(null);
+    }
+    await tf.ready();
+  } catch (err) {
+    setStoredBackend(null);
+  }
 }
 
 function updateDebugStatic() {
@@ -510,7 +565,19 @@ async function predict(elements) {
 }
 
 function init() {
-  const { app, canvas, clearBtn, result, statusHint, preview, debugCopyBtn, debugExportBmp, debugExportJson } = getElements();
+  const {
+    app,
+    canvas,
+    clearBtn,
+    result,
+    statusHint,
+    preview,
+    debugCopyBtn,
+    debugExportBmp,
+    debugExportJson,
+    backendSelect,
+    backendApplyBtn,
+  } = getElements();
   if (!canvas || !clearBtn || !result) return;
 
   if (app && (CONFIG.debug.showPreview || CONFIG.debug.showPanel)) {
@@ -565,12 +632,35 @@ function init() {
   if (debugExportJson) {
     debugExportJson.addEventListener("click", () => exportInputJson());
   }
+
+  if (backendSelect && backendApplyBtn && typeof tf !== "undefined") {
+    const current = tf.getBackend ? tf.getBackend() : "webgl";
+    const saved = getStoredBackend();
+    const options = getAvailableBackends();
+    backendSelect.innerHTML = "";
+    options.forEach((backend) => {
+      const opt = document.createElement("option");
+      opt.value = backend;
+      opt.textContent = backend;
+      backendSelect.appendChild(opt);
+    });
+    backendSelect.value = saved && options.includes(saved) ? saved : current;
+    backendApplyBtn.addEventListener("click", () => {
+      const chosen = backendSelect.value;
+      const active = tf.getBackend ? tf.getBackend() : null;
+      if (!chosen || chosen === active) return;
+      setStoredBackend(chosen);
+      location.reload();
+    });
+  }
 }
 
 window.addEventListener("load", async () => {
   const elements = getElements();
   init();
   try {
+    configureWasmBackend();
+    await applyStoredBackend();
     await loadModel();
     if (elements.statusHint) elements.statusHint.textContent = "Idle";
   } catch (err) {

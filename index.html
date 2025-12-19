@@ -226,6 +226,27 @@
       justify-content: space-between;
       gap: 10px;
       margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .backend-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    .backend-control select {
+      border-radius: 10px;
+      border: 2px solid var(--muted);
+      padding: 6px 10px;
+      font-family: inherit;
+      font-size: 0.85rem;
+      background: #ffffff;
+      color: var(--ink);
+      min-height: 32px;
     }
 
     .debug-actions {
@@ -234,14 +255,7 @@
       flex-wrap: wrap;
     }
 
-    .debug-actions .btn {
-      padding: 6px 10px;
-      font-size: 0.8rem;
-      min-height: auto;
-      border-radius: 10px;
-    }
-
-    .debug-preview .btn {
+    .debug-card .btn {
       padding: 6px 10px;
       font-size: 0.8rem;
       min-height: auto;
@@ -320,6 +334,7 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.22.0/dist/tf-backend-wasm.min.js"></script>
   <script defer src="./main.js"></script>
 </head>
 <body>
@@ -352,6 +367,11 @@
       <section class="card debug-card" id="debugPanel">
         <div class="debug-header">
           <h2>Debug</h2>
+          <div class="backend-control">
+            <span>Backend</span>
+            <select id="backendSelect" aria-label="TensorFlow.js backend"></select>
+            <button class="btn ghost" id="backendApplyBtn" type="button">Apply</button>
+          </div>
           <div class="debug-actions">
             <button class="btn ghost" id="debugCopyBtn" type="button">Copy info</button>
             <button class="btn ghost" id="debugExportJson" type="button">Export JSON</button>
