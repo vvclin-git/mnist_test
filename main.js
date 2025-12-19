@@ -30,6 +30,8 @@ const state = {
   lastInvert: null,
   lastSmoothingEnabled: null,
   lastPredictedClass: null,
+  lastInputArray: null,
+  lastInputShape: null,
 };
 
 function getElements() {
@@ -43,6 +45,7 @@ function getElements() {
     debugPanel: document.getElementById("debugPanel"),
     debugCopyBtn: document.getElementById("debugCopyBtn"),
     debugExportBmp: document.getElementById("debugExportBmp"),
+    debugExportJson: document.getElementById("debugExportJson"),
   };
 }
 
@@ -253,6 +256,24 @@ function exportPreviewBmp(preview) {
   URL.revokeObjectURL(link.href);
 }
 
+function exportInputJson() {
+  if (!state.lastInputArray || !state.lastInputShape) return;
+  const payload = {
+    shape: state.lastInputShape,
+    data: Array.from(state.lastInputArray),
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const classLabel = state.lastPredictedClass == null ? "unknown" : String(state.lastPredictedClass);
+  const filename = `mnist_${classLabel}_input.json`;
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(link.href);
+}
+
 async function loadModel() {
   state.model = await tf.loadGraphModel(CONFIG.modelUrl);
   console.log("GraphModel loaded");
@@ -412,6 +433,8 @@ function getInputTensor(canvas, preview, { invert = true } = {}) {
   if (CONFIG.debug.logTensor) tensor.array().then(val => console.log("input", val));
   return {
     tensor,
+    array: arr,
+    shape: [1, CONFIG.downscaleSize, CONFIG.downscaleSize, 1],
     stats: {
       min,
       max,
@@ -444,10 +467,12 @@ async function predict(elements) {
   try {
     const startedAt = performance.now();
     for (const invert of [true]) {
-      const { tensor: input, stats, smoothingEnabled } = getInputTensor(canvas, preview, { invert });
+      const { tensor: input, array, shape, stats, smoothingEnabled } = getInputTensor(canvas, preview, { invert });
       state.lastInputStats = stats;
       state.lastInvert = invert;
       state.lastSmoothingEnabled = smoothingEnabled;
+      state.lastInputArray = array;
+      state.lastInputShape = shape;
       updateDebugInput(stats, invert);
       updateDebugCanvas(canvas);
       const inputName = state.model.inputs[0].name;
@@ -485,7 +510,7 @@ async function predict(elements) {
 }
 
 function init() {
-  const { app, canvas, clearBtn, result, statusHint, preview, debugCopyBtn, debugExportBmp } = getElements();
+  const { app, canvas, clearBtn, result, statusHint, preview, debugCopyBtn, debugExportBmp, debugExportJson } = getElements();
   if (!canvas || !clearBtn || !result) return;
 
   if (app && (CONFIG.debug.showPreview || CONFIG.debug.showPanel)) {
@@ -535,6 +560,10 @@ function init() {
 
   if (debugExportBmp) {
     debugExportBmp.addEventListener("click", () => exportPreviewBmp(preview));
+  }
+
+  if (debugExportJson) {
+    debugExportJson.addEventListener("click", () => exportInputJson());
   }
 }
 
